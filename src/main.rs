@@ -4,14 +4,15 @@
 use axum::{response::Html, routing::get, Router};
 
 #[tokio::main]
-async fn main() {
-    let app = Router::new().route("/", get(handler));
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let app = Router::new().route("/", get(todos_index));
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
     println!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app).await?;
+    Ok(())
 }
 
-async fn handler() -> Html<&'static str> {
+async fn todos_index() -> Html<&'static str> {
     Html(include_str!("../index.html"))
 }
