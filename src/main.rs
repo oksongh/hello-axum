@@ -1,17 +1,42 @@
 // Copyright (c) 2021 Axum Tutorial Contributors
 // SPDX-License-Identifier: MIT
-// https://github.com/programatik29/axum-tutorial/
-use axum::{response::Html, routing::get, Router};
+// https://github.com/tokio-rs/axum/tree/main/examples/todos
+
+use axum::{
+    error_handling::HandleErrorLayer, http::StatusCode, response::Html, routing::get, BoxError,
+    Router,
+};
 use serde::Serialize;
+use std::time::Duration;
+use tower::ServiceBuilder;
+use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = memory_db::DB::default();
-    let app = Router::new().route("/", get(todos_index)).with_state(db);
+    let app = Router::new()
+        .route("/", get(todos_index))
+        .layer(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(|error: BoxError| async move {
+                    if error.is::<tower::timeout::error::Elapsed>() {
+                        Ok(StatusCode::REQUEST_TIMEOUT)
+                    } else {
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Unhandled internal error: {error}"),
+                        ))
+                    }
+                }))
+                .timeout(Duration::from_secs(10))
+                .layer(TraceLayer::new_for_http())
+                .into_inner(),
+        )
+        .with_state(db);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-    println!("listening on {}", listener.local_addr().unwrap());
+    tracing::debug!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await?;
     Ok(())
 }
