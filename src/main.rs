@@ -10,10 +10,20 @@ use serde::Serialize;
 use std::time::Duration;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenvy::dotenv().expect(".env not found");
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "axum_sandbox=debug,tower_http=debug".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
     let db = memory_db::DB::default();
     let app = Router::new()
         .route("/", get(todos_index))
@@ -36,7 +46,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(db);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+
+    tracing::debug!("listening on http://{}", listener.local_addr().unwrap());
     axum::serve(listener, app).await?;
     Ok(())
 }
